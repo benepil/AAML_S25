@@ -4,27 +4,27 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-
-# CNN-based Q-Network definition.
+# Define a CNN-based Q-Network for grid inputs.
 class CNNQNetwork(nn.Module):
     def __init__(self, input_channels=3, grid_size=30, num_actions=3):
         super(CNNQNetwork, self).__init__()
-        # Two convolutional layers.
+        # Increase network capacity with an extra convolutional layer.
         self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv2d(16, 32, kernel_size=3, stride=1, padding=1)
-        # Fully connected layer.
-        self.fc_input_dim = 32 * grid_size * grid_size
+        self.conv3 = nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1)
+        # We assume grid_size remains the same.
+        self.fc_input_dim = 64 * grid_size * grid_size
         self.fc = nn.Linear(self.fc_input_dim, num_actions)
-
+    
     def forward(self, x):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
-        x = x.view(x.size(0), -1)  # Flatten.
+        x = torch.relu(self.conv3(x))
+        x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
 
-
-# ReplayMemory for storing transitions.
+# Simple Replay Memory for storing transitions.
 class ReplayMemory:
     def __init__(self, capacity=1000):
         self.capacity = capacity
@@ -32,7 +32,8 @@ class ReplayMemory:
 
     def push(self, transition):
         """
-        Saves a transition tuple: (state, action, reward, next_state, done).
+        Saves a transition (state, action, reward, next_state, done).
+        If memory is full, remove the oldest transition.
         """
         if len(self.memory) >= self.capacity:
             self.memory.pop(0)
@@ -47,11 +48,18 @@ class ReplayMemory:
     def __len__(self):
         return len(self.memory)
 
-
-def train_q_network(q_network, target_network, optimizer, memory, batch_size, gamma=0.9):
+def train_q_network(q_network, target_network, optimizer, memory, batch_size, device, gamma=0.99):
     """
     Samples a mini-batch from replay memory and performs a training update.
-    Uses the target network to compute the next state Q-values.
+    
+    Args:
+      q_network: The current CNN Q-network model.
+      target_network: The target network used for computing next Q-values.
+      optimizer: Optimizer for updating the network.
+      memory: ReplayMemory instance.
+      batch_size: Number of transitions to sample.
+      device: torch device ("cuda" or "cpu").
+      gamma: Discount factor.
     """
     if len(memory) < batch_size:
         return
@@ -64,17 +72,17 @@ def train_q_network(q_network, target_network, optimizer, memory, batch_size, ga
     done_batch = []
 
     for state, action, reward, next_state, done in transitions:
-        state_batch.append(state)  # state is a 3-channel grid.
+        state_batch.append(state)         # state: a 3-channel grid (numpy array)
         action_batch.append(action)
         reward_batch.append(reward)
         next_state_batch.append(next_state)
         done_batch.append(done)
 
-    state_batch = torch.tensor(np.array(state_batch), dtype=torch.float32)
-    action_batch = torch.tensor(action_batch, dtype=torch.int64)
-    reward_batch = torch.tensor(reward_batch, dtype=torch.float32)
-    next_state_batch = torch.tensor(np.array(next_state_batch), dtype=torch.float32)
-    done_batch = torch.tensor(done_batch, dtype=torch.float32)
+    state_batch = torch.tensor(np.array(state_batch), dtype=torch.float32).to(device)
+    action_batch = torch.tensor(action_batch, dtype=torch.int64).to(device)
+    reward_batch = torch.tensor(reward_batch, dtype=torch.float32).to(device)
+    next_state_batch = torch.tensor(np.array(next_state_batch), dtype=torch.float32).to(device)
+    done_batch = torch.tensor(done_batch, dtype=torch.float32).to(device)
 
     q_values = q_network(state_batch)  # Shape: [batch_size, num_actions]
     state_action_values = q_values.gather(1, action_batch.unsqueeze(1)).squeeze(1)
@@ -93,9 +101,8 @@ def train_q_network(q_network, target_network, optimizer, memory, batch_size, ga
 
     print("Training loss:", loss.item())
 
-
 def update_target_network(q_network, target_network):
     """
-    Updates the target network by copying parameters from the main Q-network.
+    Updates the target network by copying parameters from the Q-network.
     """
     target_network.load_state_dict(q_network.state_dict())
