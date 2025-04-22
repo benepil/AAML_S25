@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+
 # Define a CNN-based Q-Network for grid inputs.
 class CNNQNetwork(nn.Module):
     def __init__(self, input_channels=3, grid_size=30, num_actions=3):
@@ -15,7 +16,7 @@ class CNNQNetwork(nn.Module):
         # We assume grid_size remains the same.
         self.fc_input_dim = 64 * grid_size * grid_size
         self.fc = nn.Linear(self.fc_input_dim, num_actions)
-    
+
     def forward(self, x):
         x = torch.relu(self.conv1(x))
         x = torch.relu(self.conv2(x))
@@ -23,6 +24,7 @@ class CNNQNetwork(nn.Module):
         x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
+
 
 # Simple Replay Memory for storing transitions.
 class ReplayMemory:
@@ -48,10 +50,11 @@ class ReplayMemory:
     def __len__(self):
         return len(self.memory)
 
+
 def train_q_network(q_network, target_network, optimizer, memory, batch_size, device, gamma=0.99):
     """
     Samples a mini-batch from replay memory and performs a training update.
-    
+
     Args:
       q_network: The current CNN Q-network model.
       target_network: The target network used for computing next Q-values.
@@ -72,7 +75,7 @@ def train_q_network(q_network, target_network, optimizer, memory, batch_size, de
     done_batch = []
 
     for state, action, reward, next_state, done in transitions:
-        state_batch.append(state)         # state: a 3-channel grid (numpy array)
+        state_batch.append(state)  # state: a 3-channel grid (numpy array)
         action_batch.append(action)
         reward_batch.append(reward)
         next_state_batch.append(next_state)
@@ -99,7 +102,6 @@ def train_q_network(q_network, target_network, optimizer, memory, batch_size, de
     loss.backward()
     optimizer.step()
 
-    print("Training loss:", loss.item())
 
 def update_target_network(q_network, target_network):
     """
