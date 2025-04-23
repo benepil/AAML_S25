@@ -1,170 +1,106 @@
+# snake.py
 import os
 import random
-import pygame
-import torch
-import torch.optim as optim
 import argparse
-import matplotlib.pyplot as plt
+import torch
 import numpy as np
 
 from snake_env import SnakeGameEnv
 from agent import CNNQNetwork, ReplayMemory, train_q_network, update_target_network
 
-# Global counters for debugging.
+# counters for exploration debugging
 random_choice = 0
 not_random_choice = 0
 
-
-def select_action(q_network, grid_state, epsilon, device):
-    """
-    Selects an action using an epsilon-greedy policy.
-
-    Args:
-      q_network: The CNN Q-network model.
-      grid_state: The current state as a 3-channel grid (numpy array).
-      epsilon: The exploration rate.
-      device: torch device.
-
-    Returns:
-      An action: 0 (straight), 1 (turn right), or 2 (turn left).
-    """
+def select_action(q_net, grid, eps, device):
     global random_choice, not_random_choice
-    if random.random() < epsilon:
+    if random.random() < eps:
         random_choice += 1
         return random.choice([0, 1, 2])
     else:
+        not_random_choice += 1
         with torch.no_grad():
-            not_random_choice += 1
-            state_tensor = torch.tensor(grid_state, dtype=torch.float32).unsqueeze(0).to(device)
-            q_values = q_network(state_tensor)
-            return q_values.argmax().item()
-
+            tensor = torch.tensor(grid, dtype=torch.float32).unsqueeze(0).to(device)
+            return q_net(tensor).argmax().item()
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--num_episodes", type=int, default=1000,
-                        help="Total number of episodes to run")
-    parser.add_argument("--update_frequency", type=int, default=10,
-                        help="Update target network and save checkpoint every this many episodes")
-    parser.add_argument("--output_dir", type=str, default="../snake_rl_output",
-                        help="Directory to save checkpoints and scores")
-    parser.add_argument("--plot", action='store_true',
-                        help="Display an interactive plot of episode scores")
+    parser.add_argument("--num_episodes", type=int, default=1000)
+    parser.add_argument("--update_frequency", type=int, default=10)
+    parser.add_argument("--output_dir", type=str, default="snake_rl_output")
     args = parser.parse_args()
 
-    # Create output directory if it doesn't exist.
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)
+    os.makedirs(args.output_dir, exist_ok=True)
     score_file = os.path.join(args.output_dir, "episode_scores.txt")
-    # Create (or overwrite) the score file with a header.
     with open(score_file, "w") as f:
         f.write("episode,score\n")
 
-    # Define the device (GPU if available).
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
 
-    # Initialize the game environment.
-    game = SnakeGameEnv(teleport_walls=True)
+    # headless training: render_mode=False
+    game = SnakeGameEnv(teleport_walls=False, render_mode=False)
     grid_size = game.HEIGHT // game.BLOCK_SIZE
 
-    # Instantiate the CNN Q-Network and the target network, and move them to GPU if available.
-    q_network = CNNQNetwork(input_channels=3, grid_size=grid_size, num_actions=3).to(device)
-    target_network = CNNQNetwork(input_channels=3, grid_size=grid_size, num_actions=3).to(device)
-    update_target_network(q_network, target_network)
+    q_net = CNNQNetwork(3, grid_size, 3).to(device)
+    tgt_net = CNNQNetwork(3, grid_size, 3).to(device)
+    update_target_network(q_net, tgt_net)
+    q_net.train(); tgt_net.eval()
 
-    q_network.train()
-    target_network.eval()
+    optimizer = torch.optim.Adam(q_net.parameters(), lr=1e-3)
+    memory = ReplayMemory(10000)
 
-    optimizer = optim.Adam(q_network.parameters(), lr=0.001)
-    memory = ReplayMemory(capacity=10000)
-
-    # Get the initial grid state.
-    state = game.get_grid_state()
-
-    # Epsilon parameters.
-    epsilon = 1.0
-    epsilon_decay = 0.990
-    min_epsilon = 0.1
+    eps = 1.0
+    eps_decay = 0.995
+    eps_min = 0.1
+    batch_size = 32
 
     episode = 1
-    batch_size = 32
-    episode_reward = 0
-    running = True
+    total_reward = 0
+    state_dict = game.reset()
 
-    ###if args.plot:
-    ###    plt.ion()
-    ###    fig, ax = plt.subplots()
-    ###    line, = ax.plot([], [], marker='o', linestyle='-')
-    ###    ax.set_xlabel("Episode")
-    ###    ax.set_ylabel("Score")
-    ###    ax.set_title("Episode Scores Over Time")
+    while episode <= args.num_episodes:
+        old_head = state_dict['snake_head']
+        old_food = state_dict['food']
+        old_dist = game._get_distance(old_head, old_food)
 
-    while running and episode <= args.num_episodes:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                pygame.quit()
-                break
+        grid = game.get_grid_state()
+        action = select_action(q_net, grid, eps, device)
+        next_state, reward, done, _ = game.step(action)
 
-        grid_state = game.get_grid_state()
-        action = select_action(q_network, grid_state, epsilon, device)
-        next_state_dict, reward, done, _ = game.step(action)
-        next_grid_state = game.get_grid_state()
-        transition = (grid_state, action, reward, next_grid_state, done)
-        memory.push(transition)
+        new_dist = game._get_distance(next_state['snake_head'], next_state['food'])
+        shaped = reward + 0.1 * (old_dist - new_dist)
 
-        episode_reward += reward
-        print(f"Episode {episode}: Action: {action}, Reward: {reward}, Score: {game.get_state()['score']}")
+        next_grid = game.get_grid_state()
+        memory.push((grid, action, shaped, next_grid, done))
 
-        # Commented out rendering for headless cluster training.
-        # game.render()  # [DISABLED for speed on headless cluster]
+        total_reward += reward
+        print(f"Ep{episode}: A={action} R={reward:.1f} S={shaped:.2f} Score={game.score}")
 
-        state = next_state_dict
+        # only train once buffer is “warmed up”
+        if len(memory) > 1000:
+            for _ in range(4):
+                train_q_network(q_net, tgt_net, optimizer, memory, batch_size, device)
 
         if done:
             with open(score_file, "a") as f:
-                f.write(f"{episode},{game.get_state()['score']}\n")
-            print(f"\nEpisode {episode} finished. Total Reward: {episode_reward}, Epsilon: {epsilon}\n")
-
-            ###if args.plot:
-            ###    try:
-            ###        with open(score_file, "r") as f:
-            ###            lines = f.readlines()[1:]  # Skip header
-            ###     episode_scores = [int(line.split(",")[1].strip()) for line in lines]
-            ###except Exception as e:
-            ###  episode_scores = []
-            ###    line.set_xdata(range(1, len(episode_scores) + 1))
-            ###    line.set_ydata(episode_scores)
-            ###    ax.relim()
-            ###    ax.autoscale_view()
-            ###    plt.draw()
-            ###    plt.pause(0.01)
-
-            state = game.reset()
-            # memory = ReplayMemory(capacity=1000)
-            episode_reward = 0
-            epsilon = max(min_epsilon, epsilon * epsilon_decay)
+                f.write(f"{episode},{game.score}\n")
+            print(f"--> End Ep{episode}: TotalR={total_reward}, eps={eps:.3f}\n")
 
             if episode % args.update_frequency == 0:
-                update_target_network(q_network, target_network)
-                checkpoint_path = os.path.join(args.output_dir, f"cnn_q_network_episode_{episode}.pth")
-                torch.save(q_network.state_dict(), checkpoint_path)
-                print(f"Target network updated and model checkpoint saved at episode {episode}.")
+                update_target_network(q_net, tgt_net)
+                torch.save(
+                    q_net.state_dict(),
+                    os.path.join(args.output_dir, f"qn_ep{episode}.pth")
+                )
+                print(f"[Checkpoint] Ep{episode}")
+
             episode += 1
+            total_reward = 0
+            eps = max(eps_min, eps * eps_decay)
+            state_dict = game.reset()
+        else:
+            state_dict = next_state
 
-        # Track weight change of the first conv layer
-        initial = q_network.conv1.weight.clone().detach().cpu().numpy()
-
-        train_q_network(q_network, target_network, optimizer, memory, batch_size, device)
-
-        final = q_network.conv1.weight.clone().detach().cpu().numpy()
-        print(f"[Episode {episode}] Conv1 weight change: {np.abs(final - initial).mean():.6f}")
-
-    ###if args.plot:
-    ###    plt.ioff()
-    ###    plt.show()
-
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
