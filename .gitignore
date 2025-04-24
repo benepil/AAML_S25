@@ -2,3 +2,4 @@
 .vscode/
 .idea/
 snake/snake-game/__pycache__/
+snake/snake-game/snake_rl_output/

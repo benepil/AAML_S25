@@ -82,7 +82,7 @@ def train_q_network(q_network, target_network, optimizer, memory, batch_size, de
     optimizer.step()
 
     # log training info
-    print(f"[TRAIN] loss={loss.item():.4f}  buffer={len(memory)}")
+    #print(f"[TRAIN] loss={loss.item():.4f}  buffer={len(memory)}")
 
 def update_target_network(q_network, target_network):
     target_network.load_state_dict(q_network.state_dict())

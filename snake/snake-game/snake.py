@@ -75,7 +75,7 @@ def main():
         memory.push((grid, action, shaped, next_grid, done))
 
         total_reward += reward
-        print(f"Ep{episode}: A={action} R={reward:.1f} S={shaped:.2f} Score={game.score}")
+        #print(f"Ep{episode}: A={action} R={reward:.1f} S={shaped:.2f} Score={game.score}")
 
         # only train once buffer is “warmed up”
         if len(memory) > 1000:
@@ -85,7 +85,7 @@ def main():
         if done:
             with open(score_file, "a") as f:
                 f.write(f"{episode},{game.score}\n")
-            print(f"--> End Ep{episode}: TotalR={total_reward}, eps={eps:.3f}\n")
+            #print(f"--> End Ep{episode}: TotalR={total_reward}, eps={eps:.3f}\n")
 
             if episode % args.update_frequency == 0:
                 update_target_network(q_net, tgt_net)
