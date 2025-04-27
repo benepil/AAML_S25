@@ -134,6 +134,7 @@ class PacmanGameAI:
             self.score += 50
             for ghost in self.ghosts:
                 ghost.frightened = True
+                ghost.frightened_timer = 60  
 
         for ghost in self.ghosts:
             self.ghost_gate_open, self.ghost_gate_timer = ghost.move(self.pacman, self.scatter_mode, self.ghosts, maze, self.ghost_gate_open, self.ghost_gate_timer)
@@ -151,7 +152,7 @@ class PacmanGameAI:
                         self.reset_positions()
         
         if not self.pellets.pellets and not self.pellets.energizers:
-            pass
+            print("Win")
 
     def draw(self):
         self.screen.fill((0, 0, 0))
@@ -170,9 +171,9 @@ class PacmanGameAI:
             ghost.draw(self.screen)
 
         # Draw lives
-        for i in range(self.lives - 1):  # Minus 1 because the current life is active
+        for i in range(self.lives):  # Minus 1 because the current life is active
             x_pos = WIDTH - (i + 1) * 30  # Spacing the lives nicely
-            y_pos = HEIGHT - 30
+            y_pos = HEIGHT - 15
             pygame.draw.circle(self.screen, (255, 255, 0), (x_pos, y_pos), 10)
 
         pygame.display.flip()

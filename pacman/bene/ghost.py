@@ -26,8 +26,16 @@ class Ghost:
         self.frightened = False
         self.revive_timer = 0
         self.in_house = True
+        self.frightened_timer = 0  # 🔥 How long they stay frightened
+
 
     def move(self, pacman, scatter_mode, ghosts, maze, ghost_gate_open, ghost_gate_timer):
+        if self.frightened:
+            self.frightened_timer -= 1
+            if self.frightened_timer <= 0:
+                self.frightened = False
+
+
         if self.exit_delay > 0:
             self.exit_delay -= 1
             return ghost_gate_open, ghost_gate_timer
