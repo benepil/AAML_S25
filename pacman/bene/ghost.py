@@ -2,7 +2,7 @@
 
 import pygame
 import random
-from settings import CELL_SIZE, GRID_WIDTH, GRID_HEIGHT, UP, DOWN, LEFT, RIGHT
+from settings import CELL_SIZE, GRID_WIDTH, GRID_HEIGHT, UP, DOWN, LEFT, RIGHT, FPS
 
 # Directions
 UP = (0, -1)
@@ -26,8 +26,16 @@ class Ghost:
         self.frightened = False
         self.revive_timer = 0
         self.in_house = True
+        self.frightened_timer = 0  # 🔥 How long they stay frightened
+
 
     def move(self, pacman, scatter_mode, ghosts, maze, ghost_gate_open, ghost_gate_timer):
+        if self.frightened:
+            self.frightened_timer -= 1
+            if self.frightened_timer <= 0:
+                self.frightened = False
+
+
         if self.exit_delay > 0:
             self.exit_delay -= 1
             return ghost_gate_open, ghost_gate_timer
@@ -52,41 +60,63 @@ class Ghost:
         # 🧠 Always define target_x, target_y
         target_x, target_y = pacman.x, pacman.y
 
-        if scatter_mode:
-            target_x, target_y = self.scatter_target
+        if self.frightened:
+            # Random movement if frightened
+            possible_dirs = [UP, DOWN, LEFT, RIGHT]
+            random.shuffle(possible_dirs)
+            for d in possible_dirs:
+                if self.valid_move(d, maze):
+                    if self.opposite_direction(d) != self.direction:
+                        self.direction = d
+                        break
         else:
-            if self.ghost_type == "blinky":
-                target_x, target_y = pacman.x, pacman.y
-            elif self.ghost_type == "pinky":
-                target_x = pacman.x + 4 * pacman.direction[0]
-                target_y = pacman.y + 4 * pacman.direction[1]
-            elif self.ghost_type == "inky":
-                blinky = [g for g in ghosts if g.ghost_type == "blinky"][0]
-                vec_x = pacman.x + 2 * pacman.direction[0] - blinky.x
-                vec_y = pacman.y + 2 * pacman.direction[1] - blinky.y
-                target_x = blinky.x + 2 * vec_x
-                target_y = blinky.y + 2 * vec_y
-            elif self.ghost_type == "clyde":
-                distance = abs(self.x - pacman.x) + abs(self.y - pacman.y)
-                if distance > 8:
+            if scatter_mode:
+                target_x, target_y = self.scatter_target
+            else:
+                if self.ghost_type == "blinky":
                     target_x, target_y = pacman.x, pacman.y
-                else:
-                    target_x, target_y = 1, GRID_HEIGHT - 2
+                elif self.ghost_type == "pinky":
+                    # Real Pinky bug fix: if Pac-Man is moving UP, shift also LEFT
+                    if pacman.direction == UP:
+                        target_x = pacman.x - 4
+                        target_y = pacman.y - 4
+                    else:
+                        target_x = pacman.x + 4 * pacman.direction[0]
+                        target_y = pacman.y + 4 * pacman.direction[1]
+                elif self.ghost_type == "inky":
+                    blinky_list = [g for g in ghosts if g.ghost_type == "blinky"]
+                    if blinky_list:
+                        blinky = blinky_list[0]
+                        tile_ahead_x = pacman.x + 2 * pacman.direction[0]
+                        tile_ahead_y = pacman.y + 2 * pacman.direction[1]
+                        vec_x = tile_ahead_x - blinky.x
+                        vec_y = tile_ahead_y - blinky.y
+                        target_x = blinky.x + 2 * vec_x
+                        target_y = blinky.y + 2 * vec_y
+                    else:
+                        target_x, target_y = pacman.x, pacman.y
+                elif self.ghost_type == "clyde":
+                    distance = abs(self.x - pacman.x) + abs(self.y - pacman.y)
+                    if distance > 8:
+                        target_x, target_y = pacman.x, pacman.y
+                    else:
+                        target_x, target_y = 1, GRID_HEIGHT - 2
 
-        # Now safe: target_x, target_y always defined
-        options = []
-        for d in [UP, DOWN, LEFT, RIGHT]:
-            nx = self.x + d[0]
-            ny = self.y + d[1]
-            if 0 <= nx < GRID_WIDTH and 0 <= ny < GRID_HEIGHT:
-                if maze[ny][nx] == '0' or (maze[ny][nx] in ('2', 'G') and self.revive_timer > 0):
-                    dist = (nx - target_x)**2 + (ny - target_y)**2
-                    options.append((dist, d))
+            # Find best direction (shortest distance to target), but no reverse
+            options = []
+            for d in [UP, LEFT, DOWN, RIGHT]:  # Arcade priority order
+                if self.valid_move(d, maze):
+                    if self.opposite_direction(d) != self.direction:
+                        nx = self.x + d[0]
+                        ny = self.y + d[1]
+                        dist = (nx - target_x) ** 2 + (ny - target_y) ** 2
+                        options.append((dist, d))
 
-        if options:
-            options.sort()
-            self.direction = options[0][1]
+            if options:
+                options.sort()
+                self.direction = options[0][1]
 
+        # Move one step
         new_x = self.x + self.direction[0]
         new_y = self.y + self.direction[1]
 
@@ -102,6 +132,19 @@ class Ghost:
 
         return ghost_gate_open, ghost_gate_timer
 
+    def valid_move(self, direction, maze):
+        nx = self.x + direction[0]
+        ny = self.y + direction[1]
+        if nx < 0:
+            nx = GRID_WIDTH - 1
+        elif nx >= GRID_WIDTH:
+            nx = 0
+        if 0 <= ny < GRID_HEIGHT:
+            return maze[ny][nx] == '0' or maze[ny][nx] in ('2', 'G')
+        return False
+
+    def opposite_direction(self, direction):
+        return (-direction[0], -direction[1])
 
     def draw(self, screen):
         color = (0, 0, 255) if self.frightened else self.color
@@ -111,4 +154,6 @@ class Ghost:
         self.x = self.start_x
         self.y = self.start_y
         self.in_house = True
-        self.revive_timer = 180
+        self.frightened = False
+        self.revive_timer = FPS*2  # 🔥 Wait 2 seconds before moving out again (120 frames at 60FPS)
+

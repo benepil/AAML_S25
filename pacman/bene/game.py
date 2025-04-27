@@ -5,20 +5,10 @@ import sys
 from ghost import Ghost
 from pellet_manager import PelletManager
 from pacman import PacMan
-
-
-# Directions
-UP = (0, -1)
-DOWN = (0, 1)
-LEFT = (-1, 0)
-RIGHT = (1, 0)
+from settings import CELL_SIZE, GRID_WIDTH, GRID_HEIGHT, UP, DOWN, LEFT, RIGHT, FPS
 
 # Constants
-CELL_SIZE = 24
-GRID_WIDTH = 19
-GRID_HEIGHT = 21
 WIDTH, HEIGHT = GRID_WIDTH * CELL_SIZE, GRID_HEIGHT * CELL_SIZE
-FPS = 60
 YELLOW = (255, 255, 0)
 BLUE = (0, 0, 255)
 
@@ -39,7 +29,7 @@ maze = [
     ['1','0','1','1','1','1','0','1','1','1','1','1','0','1','1','1','1','0','1'],
     ['1','0','0','0','0','0','0','0','0','0','0','0','0','0','0','0','0','0','1'],
     ['1','1','1','0','1','1','1','0','1','1','1','0','1','1','1','0','1','1','1'],
-    ['1','0','0','0','1','0','0','0','0','P','0','0','0','0','1','0','0','0','1'],
+    ['1','0','0','0','1','0','0','0','0','0','0','0','0','0','1','0','0','0','1'],
     ['1','0','1','0','1','0','1','0','1','1','1','0','1','0','1','0','1','0','1'],
     ['1','0','1','0','0','0','1','0','0','0','0','0','1','0','0','0','1','0','1'],
     ['1','0','1','1','1','0','1','1','1','0','1','1','1','0','1','1','1','0','1'],
@@ -134,6 +124,7 @@ class PacmanGameAI:
             self.score += 50
             for ghost in self.ghosts:
                 ghost.frightened = True
+                ghost.frightened_timer = FPS  * 10
 
         for ghost in self.ghosts:
             self.ghost_gate_open, self.ghost_gate_timer = ghost.move(self.pacman, self.scatter_mode, self.ghosts, maze, self.ghost_gate_open, self.ghost_gate_timer)
@@ -146,12 +137,12 @@ class PacmanGameAI:
                 else:
                     self.lives -=1
                     if self.lives == 0:
-                        break
+                        self.reset()
                     else:
                         self.reset_positions()
         
         if not self.pellets.pellets and not self.pellets.energizers:
-            pass
+            self.reset()
 
     def draw(self):
         self.screen.fill((0, 0, 0))
@@ -170,10 +161,16 @@ class PacmanGameAI:
             ghost.draw(self.screen)
 
         # Draw lives
-        for i in range(self.lives - 1):  # Minus 1 because the current life is active
+        for i in range(self.lives):  # Minus 1 because the current life is active
             x_pos = WIDTH - (i + 1) * 30  # Spacing the lives nicely
-            y_pos = HEIGHT - 30
+            y_pos = HEIGHT - 15
             pygame.draw.circle(self.screen, (255, 255, 0), (x_pos, y_pos), 10)
+
+        # Draw score
+        font = pygame.font.SysFont(None, 36)
+        score_text = font.render(f"Score: {self.score}", True, (255, 255, 255))
+        self.screen.blit(score_text, (10, 10))  # Top-left corner
+
 
         pygame.display.flip()
 
