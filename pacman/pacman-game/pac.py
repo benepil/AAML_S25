@@ -13,7 +13,7 @@ class Pac(pygame.sprite.Sprite):
 		# pac animation
 		self._import_character_assets()
 		self.frame_index = 0
-		self.animation_speed = 0.5
+		self.animation_speed = 1
 		self.image = self.animations["idle"][self.frame_index]
 		self.rect = self.image.get_rect(topleft = (self.abs_x, self.abs_y))
 		self.mask = pygame.mask.from_surface(self.image)

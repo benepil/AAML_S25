@@ -11,10 +11,15 @@ class Berry(pygame.sprite.Sprite):
 		self.thickness = size
 		self.abs_x = (row * CHAR_SIZE) + (CHAR_SIZE // 2)
 		self.abs_y = (col * CHAR_SIZE) + (CHAR_SIZE // 2)
+		self.x = row
+		self.y = col
 
 		# temporary rect for colliderect-checking
 		self.rect = pygame.Rect(self.abs_x,self.abs_y, self.size * 2, self.size * 2)
 
 	def update(self, screen):
 		self.rect = pygame.draw.circle(screen, self.color, (self.abs_x, self.abs_y), self.size, self.thickness)
+
+	def getPos(self):
+		return self.x, self.y
 		

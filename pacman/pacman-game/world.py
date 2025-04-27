@@ -1,12 +1,14 @@
 import pygame
 import time
 
-from settings import HEIGHT, WIDTH, NAV_HEIGHT, CHAR_SIZE, MAP, PLAYER_SPEED
+from settings import HEIGHT, WIDTH, NAV_HEIGHT, CHAR_SIZE, MAP, PLAYER_SPEED, BOARD_RATIO
 from pac import Pac
 from cell import Cell
 from berry import Berry
 from ghost import Ghost
 from display import Display
+
+from pprint import pprint
 
 class World:
 	def __init__(self, screen):
@@ -62,7 +64,7 @@ class World:
 					self.berries.add(Berry(x_index, y_index, CHAR_SIZE // 4))
 				elif char == "B":	# for big berries
 					self.berries.add(Berry(x_index, y_index, CHAR_SIZE // 2, is_power_up=True))
-		time.sleep(2)
+		time.sleep(10)
 
 
 	def restart_level(self):
@@ -107,6 +109,16 @@ class World:
 
 	def update(self):
 		if not self.game_over:
+
+			# get map data from sprite 
+			map_data = [[0 for x in range(BOARD_RATIO[1])] for y in range(BOARD_RATIO[0])] 
+			map_data[int(self.player.sprite.rect.x/32)][int(self.player.sprite.rect.y/32)]=1
+			for sprite in self.berries:
+				map_data[int(sprite.rect.x/32)][int(sprite.rect.y/32)]=2
+			for sprite in self.ghosts:
+				map_data[int(sprite.rect.x/32)][int(sprite.rect.y/32)]=3
+			
+
 			# player movement
 			pressed_key = pygame.key.get_pressed()
 			self.player.sprite.animate(pressed_key, self.walls_collide_list)
