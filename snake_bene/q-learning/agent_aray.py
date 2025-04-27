@@ -5,10 +5,11 @@ from collections import deque
 from game import SnakeGameAI, Direction, Point
 from helper import plot
 from model_array import Conv_QNet, QTrainer
+from copy import deepcopy
 
 MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
-LR = 0.01
+LR = 0.001
 BOARD_RATIO = (18,18)
 CELL_SIZE = 20
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -22,6 +23,8 @@ class Agent:
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
         self.model = Conv_QNet(grid_size=BOARD_RATIO[0]+2, output_size=3).to(DEVICE)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
+        self.target_model = deepcopy(self.model)
+        self.target_update_freq = 100  # update every 100 games
 
 
     def get_state(self, game):
@@ -40,22 +43,24 @@ class Agent:
         self.memory.append((state, action, reward, next_state, done)) # popleft if MAX_MEMORY is reached
 
     def train_long_memory(self):
-        if len(self.memory) > BATCH_SIZE:
+        if len(self.memory) > BATCH_SIZE * 5:
             mini_sample = random.sample(self.memory, BATCH_SIZE) # list of tuples
         else:
             mini_sample = self.memory
 
         states, actions, rewards, next_states, dones = zip(*mini_sample)
+        actions = [np.argmax(a) for a in actions]  
         self.trainer.train_step(states, actions, rewards, next_states, dones)
         #for state, action, reward, nexrt_state, done in mini_sample:
         #    self.trainer.train_step(state, action, reward, next_state, done)
 
     def train_short_memory(self, state, action, reward, next_state, done):
+        action = np.argmax(action)
         self.trainer.train_step(state, action, reward, next_state, done)
 
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
-        self.epsilon = 80 - self.n_games
+        self.epsilon = max(10, 80 - self.n_games // 10)
         final_move = [0,0,0]
         if random.randint(0, 200) < self.epsilon:
             move = random.randint(0, 2)
@@ -73,6 +78,7 @@ def train():
     plot_scores = []
     plot_mean_scores = []
     total_score = 0
+    total_reward = 0
     record = 0
     agent = Agent()
     game = SnakeGameAI(w=BOARD_RATIO[0]*CELL_SIZE, h=BOARD_RATIO[1]*CELL_SIZE)
@@ -85,6 +91,7 @@ def train():
 
         # perform move and get new state
         reward, done, score = game.play_step(final_move)
+        total_reward += reward
         state_new = agent.get_state(game)
 
         # train short memory
@@ -97,19 +104,24 @@ def train():
             # train long memory, plot result
             game.reset()
             agent.n_games += 1
-            agent.train_long_memory()
+            train_repeats = 1 + len(agent.memory) // (BATCH_SIZE * 5)
+            for _ in range(min(train_repeats, 10)):
+                agent.train_long_memory()
 
             if score > record:
                 record = score
                 agent.model.save()
 
-            print('Game', agent.n_games, 'Score', score, 'Record:', record)
-
+            print('Game', agent.n_games, 'Score', score, 'Record:', record, 'Reward:', total_reward)
+            total_reward=0
             plot_scores.append(score)
             total_score += score
             mean_score = total_score / agent.n_games
             plot_mean_scores.append(mean_score)
             plot(plot_scores, plot_mean_scores)
+
+        if agent.n_games % agent.target_update_freq == 0:
+            agent.target_model.load_state_dict(agent.model.state_dict())
 
 
 if __name__ == '__main__':

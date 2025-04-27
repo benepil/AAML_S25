@@ -25,7 +25,7 @@ BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-SPEED = 40000
+SPEED = 10000
 
 class SnakeGameAI:
 
@@ -70,16 +70,16 @@ class SnakeGameAI:
                 pygame.quit()
                 quit()
         
-        distance_fruit_old = math.sqrt((self.snake[0].x-self.food.x)**2 + (self.snake[0].y-self.food.y)**2)
+        old_distance = math.dist((self.snake[0].x, self.snake[0].y), (self.food.x, self.food.y))
 
         # 2. move
         self._move(action) # update the head
         self.snake.insert(0, self.head)
         
         # 3. check if game over
-        reward = 0
+        reward = -0.01
         game_over = False
-        if self.is_collision() or self.frame_iteration > 100*len(self.snake):
+        if self.is_collision() or self.frame_iteration > 200 + 50*len(self.snake):
             game_over = True
             reward = -10
             return reward, game_over, self.score
@@ -91,15 +91,18 @@ class SnakeGameAI:
             self.score += 1
             reward = 10
             self._place_food()
-        elif distance_fruit_new<distance_fruit_old:
-            reward = 2
-            self.snake.pop()
         else:
-            reward = -0.01
-            self.snake.pop()
+            self.snake.pop()  # normal move
+            new_distance = math.dist((self.head.x, self.head.y), (self.food.x, self.food.y))
+
+            # Reward shaping: moving closer to food
+            if new_distance < old_distance:
+                reward += 0.2
+            else:
+                reward -= 0.2
         
         # 5. update ui and clock
-        self._update_ui()
+        #self._update_ui()
         self.clock.tick(SPEED)
         # 6. return game over and score
         return reward, game_over, self.score

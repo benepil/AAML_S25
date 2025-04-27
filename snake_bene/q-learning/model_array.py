@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 import os
-
+import numpy as np
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 class Conv_QNet(nn.Module):
@@ -31,56 +31,53 @@ class Conv_QNet(nn.Module):
     
 
 class QTrainer:
-    def __init__(self, model, lr, gamma):
+    def __init__(self, model, lr, gamma, target_model=None):
         self.model = model
+        self.target_model = target_model or model
         self.gamma = gamma
         self.optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-        self.criterion = torch.nn.MSELoss()
+        self.criterion = torch.nn.SmoothL1Loss()
 
     def train_step(self, state, action, reward, next_state, done):
-        # Convert inputs to tensors
-        state = torch.tensor(state, dtype=torch.float).to(DEVICE)
-        next_state = torch.tensor(next_state, dtype=torch.float).to(DEVICE)
-        action = torch.tensor(action, dtype=torch.long).to(DEVICE)
-        reward = torch.tensor(reward, dtype=torch.float).to(DEVICE)  # This could be a batch tensor
-        done = torch.tensor(done, dtype=torch.bool).to(DEVICE)
+        # Single sample?
+        is_single = isinstance(state, np.ndarray)
 
-        # Handle batch dimensions (if state is 1D, add a batch dimension)
-        if len(state.shape) == 1:
-            state = torch.unsqueeze(state, 0)
-            next_state = torch.unsqueeze(next_state, 0)
-            action = torch.unsqueeze(action, 0)
-            reward = torch.unsqueeze(reward, 0)
-            done = (done, )
-        elif len(state.shape) == 5:
-            state = state.squeeze(1)
+        if is_single:
+            state = torch.tensor(state, dtype=torch.float32).to(DEVICE)
+            next_state = torch.tensor(next_state, dtype=torch.float32).to(DEVICE)
+            action = torch.tensor([action], dtype=torch.long).to(DEVICE)
+            reward = torch.tensor([reward], dtype=torch.float32).to(DEVICE)
+            done = torch.tensor([done], dtype=torch.bool).to(DEVICE)
+        else:
+            # Fix: convert from [B, 1, 1, 20, 20] to [B, 1, 20, 20]
+            state = np.array(state)
+            next_state = np.array(next_state)
 
-        # Predict Q values for the current state
+            if state.ndim == 5:
+                state = state.squeeze(2)
+                next_state = next_state.squeeze(2)
+
+            state = torch.tensor(state, dtype=torch.float32).to(DEVICE)
+            next_state = torch.tensor(next_state, dtype=torch.float32).to(DEVICE)
+            action = torch.tensor(action, dtype=torch.long).to(DEVICE)
+            reward = torch.tensor(reward, dtype=torch.float32).to(DEVICE)
+            done = torch.tensor(done, dtype=torch.bool).to(DEVICE)
+
+        # Q(s)
         pred = self.model(state)
 
-        # Create target Q values (clone of pred)
-        target = pred.clone()
+        # Q(s')
+        with torch.no_grad():
+            next_Q = self.target_model(next_state)  # instead of self.model
+            max_next_Q = torch.max(next_Q, dim=1)[0]
 
-        # Check if 'reward' and 'done' are scalar tensors (0-dim) and handle accordingly
-        if reward.dim() == 0:  # scalar case
-            reward_value = reward.item()  # Use .item() to get a scalar value
-            done_value = done.item()      # Use .item() to get a scalar value
-            Q_new = reward_value if done_value else reward_value + self.gamma * torch.max(self.model(next_state))
-            target[0][action] = Q_new
-        else:  # batch case
-            for idx in range(len(reward)):  # Iterate over the batch
-                reward_value = reward[idx].item()  # Extract value from tensor
-                done_value = done[idx].item()      # Extract value from tensor
+        # Q target
+        target = pred.clone().detach()
+        Q_new = reward + self.gamma * max_next_Q * (~done)
+        target[range(len(action)), action] = Q_new
 
-                # Compute the new Q value
-                if done_value:
-                    Q_new = reward_value 
-                else:
-                    Q_new = reward_value + self.gamma * torch.max(self.model(next_state[idx]))
-                target[idx][action[idx]] = Q_new
-
-        # Backpropagation
+        # Train
         self.optimizer.zero_grad()
-        loss = self.criterion(target, pred)
+        loss = self.criterion(pred, target)
         loss.backward()
         self.optimizer.step()
