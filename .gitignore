@@ -1,6 +1,6 @@
 .venv/
 .vscode/
-*/model/
-*/eval/
-*/___pycache__/
+*model/
+*eval/
+*___pycache__/
 .idea/
