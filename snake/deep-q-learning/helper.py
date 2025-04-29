@@ -5,7 +5,7 @@ plt.ion()
 
 def plot(scores, mean_scores, losses=None):
     display.clear_output(wait=True)
-    plt.show()
+    #plt.show()
     plt.clf()
     plt.title('Training Progress')
     plt.xlabel('Game')

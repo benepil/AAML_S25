@@ -6,7 +6,7 @@ import numpy as np
 import math
 
 pygame.init()
-font = pygame.font.Font('arial.ttf', 25)
+font = pygame.font.SysFont(None, 36)
 
 class Direction(Enum):
     RIGHT = 1
@@ -24,7 +24,7 @@ BLUE2 = (0, 100, 255)
 BLACK = (0,0,0)
 
 BLOCK_SIZE = 20
-SPEED = 10000
+SPEED = 100000
 
 class SnakeGameAI:
 
@@ -34,7 +34,7 @@ class SnakeGameAI:
         self.direction_history = []
         self.steps_since_last_food = 0
         # init display
-        #self.display = pygame.display.set_mode((self.w, self.h))
+        self.display = pygame.display.set_mode((self.w, self.h))
         #pygame.display.set_caption('Snake')
         self.clock = pygame.time.Clock()
         self.reset()
@@ -63,9 +63,17 @@ class SnakeGameAI:
 
 
     def _place_food(self):
+        dir_food = random.randint(1,4)
         if self.score == 0 and self.frame_iteration < 50:
-            self.food = Point(self.head.x + BLOCK_SIZE, self.head.y)
-            return
+            if dir_food == 1:
+                self.food = Point(self.head.x, self.head.y + BLOCK_SIZE)
+                return
+            if dir_food == 2:
+                self.food = Point(self.head.x, self.head.y - BLOCK_SIZE)
+                return
+            if dir_food == 3:
+                self.food = Point(self.head.x + BLOCK_SIZE, self.head.y)
+                return
 
         x = random.randint(0, (self.w-BLOCK_SIZE )//BLOCK_SIZE )*BLOCK_SIZE
         y = random.randint(0, (self.h-BLOCK_SIZE )//BLOCK_SIZE )*BLOCK_SIZE
@@ -78,11 +86,6 @@ class SnakeGameAI:
         self.frame_iteration += 1
         self.steps_since_last_food += 1
         reward = 0
-
-        if n_games < 20 and not eval:
-            rand_move = random.randint(0, 2)
-            action = [0, 0, 0]
-            action[rand_move] = 1
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -170,6 +173,7 @@ class SnakeGameAI:
 
         self.clock.tick(SPEED)
         reward = np.clip(reward, -10, 10)
+        self._update_ui()
         return reward, game_over, self.score
 
 
@@ -202,21 +206,19 @@ class SnakeGameAI:
 
 
     def _move(self, action):
-        # [straight, right, left]
+        # [up, right, down, left]
 
         clock_wise = [Direction.RIGHT, Direction.DOWN, Direction.LEFT, Direction.UP]
         idx = clock_wise.index(self.direction)
-
-        if np.array_equal(action, [1, 0, 0]):
-            new_dir = clock_wise[idx] # no change
-        elif np.array_equal(action, [0, 1, 0]):
-            next_idx = (idx + 1) % 4
-            new_dir = clock_wise[next_idx] # right turn r -> d -> l -> u
-        else: # [0, 0, 1]
-            next_idx = (idx - 1) % 4
-            new_dir = clock_wise[next_idx] # left turn r -> u -> l -> d
-
-        self.direction = new_dir
+    	
+        if np.array_equal(action, [1, 0, 0, 0]):
+            self.direction=Direction.UP
+        elif np.array_equal(action, [0, 1, 0, 0]):
+            self.direction=Direction.RIGHT
+        elif np.array_equal(action, [0, 0, 1, 0]):
+            self.direction=Direction.DOWN
+        elif np.array_equal(action, [0, 0, 0, 1]):
+            self.direction=Direction.LEFT
 
         x = self.head.x
         y = self.head.y
@@ -234,3 +236,12 @@ class SnakeGameAI:
         self.direction_history.append(self.direction)
         if len(self.direction_history) > 10:
             self.direction_history.pop(0)
+
+    def check_action(self, action):
+        if ((self.direction == Direction.RIGHT and np.array_equal(action, [0, 0, 0, 1])) or
+        (self.direction == Direction.LEFT and np.array_equal(action, [0, 1, 0, 0])) or
+        (self.direction == Direction.DOWN and np.array_equal(action, [1, 0, 0, 0])) or
+        (self.direction == Direction.UP and np.array_equal(action, [0, 0, 1, 0]))):
+            return False
+        else:
+            return True

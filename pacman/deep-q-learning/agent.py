@@ -181,6 +181,7 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
         "action_0": action_dist.get(0, 0),
         "action_1": action_dist.get(1, 0),
         "action_2": action_dist.get(2, 0),
+        "action_2": action_dist.get(3, 0),
     }
     df = pd.DataFrame([summary])
     csv_path = "eval/eval_summary.csv"

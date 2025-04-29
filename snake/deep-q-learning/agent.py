@@ -16,7 +16,7 @@ MAX_MEMORY = 100_000
 BATCH_SIZE = 1000
 ITERATIONS = 10000
 LR = 0.001
-BOARD_RATIO = (18,18)
+BOARD_RATIO = (19,17)
 CELL_SIZE = 20
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -27,7 +27,7 @@ class Agent:
         self.epsilon = 0 # randomness
         self.gamma = 0.9 # discount rate
         self.memory = deque(maxlen=MAX_MEMORY) # popleft()
-        self.model = Conv_QNet(grid_size=BOARD_RATIO[0]+2, output_size=3).to(DEVICE)
+        self.model = Conv_QNet(grid_size=BOARD_RATIO[0]+2, output_size=4).to(DEVICE)
         self.target_model = deepcopy(self.model)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma, target_model=self.target_model)
         self.N_STEP = 3  # or 5
@@ -81,19 +81,19 @@ class Agent:
         # Slow decay with initial exploration freeze
         if eval:
             epsilon = 0  # No randomness in eval
-        elif self.n_games < 1500:
+        elif self.n_games < 500:
             epsilon = 1.0
         else:
-            epsilon = max(0.05, 0.995 ** (self.n_games - 1500))
+            epsilon = max(0.05, 0.995 ** (self.n_games - 500))
 
-        final_move = [0, 0, 0]
+        final_move = [0, 0, 0, 0]
         if random.random() < epsilon:
             move = random.randint(0, 2)
         else:
             q_vals = self.model(torch.tensor(state, dtype=torch.float).to(DEVICE))[0]
             probs = torch.softmax(q_vals, dim=0).cpu().detach().numpy()
-            move = np.random.choice(3, p=probs)
-        final_move = [0, 0, 0]
+            move = np.random.choice(4, p=probs)
+        final_move = [0, 0, 0, 0]
         final_move[move] = 1
 
         return final_move
@@ -136,6 +136,8 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
         while not done:
             state = agent.get_state(game)
             final_move = agent.get_action(state, eval=True)
+            while game.check_action(final_move) != True:
+                final_move = agent.get_action(state, eval=True)
             state_tensor = torch.tensor(state, dtype=torch.float).to(DEVICE)
             with torch.no_grad():
                 q_vals = agent.model(state_tensor).cpu().numpy().flatten()
@@ -174,6 +176,7 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
         "action_0": action_dist.get(0, 0),
         "action_1": action_dist.get(1, 0),
         "action_2": action_dist.get(2, 0),
+        "action_3": action_dist.get(2, 0),
     }
     df = pd.DataFrame([summary])
     csv_path = "eval/eval_summary.csv"
@@ -205,14 +208,16 @@ def train(model=None):
 
     for _ in range(1000):
         state = agent.get_state(game)
-        action = random.choice([[1,0,0], [0,1,0], [0,0,1]])
+        action = random.choice([[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1]])
+        while game.check_action(action) != True:
+            action = random.choice([[1,0,0,0], [0,1,0,0], [0,0,1,0], [0,0,0,1]])
         reward, done, score = game.play_step(action, agent.n_games)
         next_state = agent.get_state(game)
         agent.remember(state, action, reward, next_state, done)
         if done:
             game.reset()
 
-    with open("log_file", "w") as f:
+    with open("eval/log_file", "w") as f:
         f.write("game,score,record,mean_score,total_reward,loss\n")
 
     while x < ITERATIONS:
@@ -221,6 +226,8 @@ def train(model=None):
 
         # get move
         final_move = agent.get_action(state_old)
+        while game.check_action(final_move) != True:
+            final_move = agent.get_action(state_old)
 
         # perform move and get new state
         reward, done, score = game.play_step(final_move, agent.n_games)
@@ -283,26 +290,32 @@ def train(model=None):
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument("--iterations")
+    parser.add_argument("--games")
     parser.add_argument("--mode")
     parser.add_argument("--model")
     args=parser.parse_args()
 
-    if args.iterations:
-        ITERATIONS = int(args.iterations)
     if args.mode:
         if args.mode=="train":
+            if args.games:
+                ITERATIONS = int(args.games)
             if args.model:
                 train(args.model)
             train()
         elif args.mode=="eval":
+            games = 100
+            if args.games:
+                games = int(args.games)
             if args.model:
                 agent = Agent()
                 agent.model.load_state_dict(torch.load(os.path.join(f"model/model_{args.model}.pth"), map_location=DEVICE))
-                evaluate(agent, os.path.splitext(args.model)[0],100)
+                evaluate(agent, os.path.splitext(args.model)[0],games)
             else:
                 for root, _, files in os.walk("model/"):  
                     for filename in files:  # loop through files in the current directory
                         agent = Agent()
                         agent.model.load_state_dict(torch.load(os.path.join(root, filename), map_location=DEVICE))
                         evaluate(agent, os.path.splitext(filename)[0],100)
+
+    else:
+        train()
