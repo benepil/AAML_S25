@@ -1,2 +1,5 @@
 .venv/
 .vscode/
+*/model/
+*/eval/
+*/___pycache__/
