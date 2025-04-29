@@ -1,0 +1,12 @@
+
+CELL_SIZE = 24
+GRID_WIDTH = 19
+GRID_HEIGHT = 21
+
+
+UP = (0, -1)
+DOWN = (0, 1)
+LEFT = (-1, 0)
+RIGHT = (1, 0)
+
+FPS = 120
