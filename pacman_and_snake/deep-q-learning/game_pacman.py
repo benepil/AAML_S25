@@ -101,7 +101,7 @@ class PacmanGameAI:
             self.clock.tick(FPS)
             self.handle_events()
             self.update()
-            #self.draw()
+            self.draw()
 
     def handle_events(self):
         for event in pygame.event.get():
@@ -184,7 +184,7 @@ class PacmanGameAI:
         pygame.display.flip()
 
 
-    def play_step(self, action, ngames):
+    def play_step(self, action, ngames=0):
         game_over=False
         # Convert action [UP, DOWN, LEFT, RIGHT] → direction
         direction_map = [LEFT, RIGHT, UP, DOWN]
@@ -214,16 +214,16 @@ class PacmanGameAI:
                 else:
                     self.lives -= 1
                     reward -= 300
-                    if self.lives == 0:
-                        game_over=True
-                    else:
-                        self.reset_positions()
+                    self.reset_positions()
 
         if not self.pellets.pellets and not self.pellets.energizers:
             reward += 1000
             game_over=True
 
         reward = np.clip(reward, -10, 10)
+        #self.draw()
+        if self.lives == 0:
+            game_over=True
         return reward, game_over, self.score
 
     def get_state(self, game):

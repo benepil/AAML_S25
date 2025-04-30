@@ -153,71 +153,85 @@ def plot_eval_scores(scores, agent_name):
 def evaluate(agent, model_path="model/model.pth", n_games=10):
     agent_name = os.path.splitext(os.path.basename(model_path))[0]
     print(f"\n[ Evaluation Mode ] \n {agent_name} \n")
-    eval_file = f"eval/{agent_name}_eval.txt"
     os.makedirs("eval", exist_ok=True)
-    open(eval_file, "w").close()
+    games=[PacmanGameAI(), SnakeGameAI(w=BOARD_RATIO[0]*CELL_SIZE, h=BOARD_RATIO[1]*CELL_SIZE)]
     
     agent.model.eval()
     total_score = 0
     eval_scores = []
     all_actions = []
 
-    for game_id in range(1, n_games + 1):
-        print(game_id)
-        game = SnakeGameAI(w=BOARD_RATIO[0]*CELL_SIZE, h=BOARD_RATIO[1]*CELL_SIZE)
-        done = False
-        steps = 0
-        score = 0
-        while not done:
-            state = agent.get_state(game)
-            final_move = agent.get_action(state, eval=True)
-            while game.check_action(final_move) != True:
+    for game in games:
+        game_name = "snake"
+        if isinstance(game, PacmanGameAI):
+            game_name="pacman"
+        eval_file = f"eval/{agent_name}_{game_name}_eval.txt"
+        open(eval_file, "w").close()
+        
+        for game_id in range(1, n_games + 1):
+            print(game_id)
+            done = False
+            steps = 0
+            score = 0
+            while not done:
+                state = None
+                if isinstance(game, PacmanGameAI):
+                    state = agent.get_state_pacman(game)
+                elif isinstance(game, SnakeGameAI):
+                    state = agent.get_state_snake(game)
                 final_move = agent.get_action(state, eval=True)
-            state_tensor = torch.tensor(state, dtype=torch.float).to(DEVICE)
-            with torch.no_grad():
-                q_vals = agent.model(state_tensor).cpu().numpy().flatten()
-            move = np.argmax(final_move)
-            all_actions.append(move)
+                if isinstance(game, SnakeGameAI):
+                    while game.check_action(final_move) != True:
+                        final_move = agent.get_action(state, eval=True)
+                state_tensor = torch.tensor(state, dtype=torch.float).to(DEVICE)
+                with torch.no_grad():
+                    q_vals = agent.model(state_tensor).cpu().numpy().flatten()
+                move = np.argmax(final_move)
+                all_actions.append(move)
 
+                with open(eval_file, "a") as f:
+                    f.write(f"[Game {game_id}] Step {steps} - Q-values: {q_vals} - Move: {final_move}\n")
+
+                reward, done, score = game.play_step(final_move, agent.n_games)
+                steps += 1
+                
+            agent.n_step_buffer.clear()
+            # train long memory, plot result
+            game.reset()
+            agent.n_games += 1
+            eval_scores.append(score)
+            total_score += score
             with open(eval_file, "a") as f:
-                f.write(f"[Game {game_id}] Step {steps} - Q-values: {q_vals} - Move: {final_move}\n")
+                f.write(f"Game {game_id} finished. Score: {score}, Steps Survived: {steps}\n")
 
-            reward, done, score = game.play_step(final_move)
-            steps += 1
+        avg_score = total_score / n_games
+        action_dist = Counter(all_actions)
 
-        eval_scores.append(score)
-        total_score += score
+        # Write final stats
         with open(eval_file, "a") as f:
-            f.write(f"Game {game_id} finished. Score: {score}, Steps Survived: {steps}\n")
+            f.write(f"\nAverage Score over {n_games} games: {avg_score}\n")
+            f.write(f"Action Distribution: {dict(action_dist)}\n")
 
-    avg_score = total_score / n_games
-    action_dist = Counter(all_actions)
+        # Save plot
+        plot_eval_scores(eval_scores, agent_name)
 
-    # Write final stats
-    with open(eval_file, "a") as f:
-        f.write(f"\nAverage Score over {n_games} games: {avg_score}\n")
-        f.write(f"Action Distribution: {dict(action_dist)}\n")
+        # Save CSV summary
+        summary = {
+            "model": f"model_{agent_name}",
+            "avg_score": avg_score,
+            "min_score": min(eval_scores),
+            "max_score": max(eval_scores),
+            "std_dev": np.std(eval_scores),
+            "avg_action_0": action_dist.get(0, 0)/n_games,
+            "avg_action_1": action_dist.get(1, 0)/n_games,
+            "avg_action_2": action_dist.get(2, 0)/n_games,
+            "avg_action_3": action_dist.get(3, 0)/n_games,
+        }
+        df = pd.DataFrame([summary])
+        csv_path = f"eval/{game_name}_eval_summary.csv"
+        df.to_csv(csv_path, mode='a', header=not os.path.exists(csv_path), index=False)
 
-    # Save plot
-    plot_eval_scores(eval_scores, agent_name)
-
-    # Save CSV summary
-    summary = {
-        "model": f"model_{agent_name}",
-        "avg_score": avg_score,
-        "min_score": min(eval_scores),
-        "max_score": max(eval_scores),
-        "std_dev": np.std(eval_scores),
-        "avg_action_0": action_dist.get(0, 0)/n_games,
-        "avg_action_1": action_dist.get(1, 0)/n_games,
-        "avg_action_2": action_dist.get(2, 0)/n_games,
-        "avg_action_3": action_dist.get(3, 0)/n_games,
-    }
-    df = pd.DataFrame([summary])
-    csv_path = "eval/eval_summary.csv"
-    df.to_csv(csv_path, mode='a', header=not os.path.exists(csv_path), index=False)
-
-    agent.model.train()
+        agent.model.train()
 
 
 def train(model=None):
