@@ -110,7 +110,6 @@ class Ghost:
                         ny = self.y + d[1]
                         dist = (nx - target_x) ** 2 + (ny - target_y) ** 2
                         options.append((dist, d))
-
             if options:
                 options.sort()
                 self.direction = options[0][1]
@@ -139,7 +138,10 @@ class Ghost:
         elif nx >= GRID_WIDTH:
             nx = 0
         if 0 <= ny < GRID_HEIGHT:
+            if self.ghost_type=="blinky" and maze[ny][nx]=='G':
+                return False
             return maze[ny][nx] == '0' or maze[ny][nx] in ('2', 'G')
+        
         return False
 
     def opposite_direction(self, direction):

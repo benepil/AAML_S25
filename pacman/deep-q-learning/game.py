@@ -129,8 +129,8 @@ class PacmanGameAI:
             reward += 50
             for ghost in self.ghosts:
                 ghost.frightened = True
-                ghost.frightened_timer = FPS  * 5
-
+                ghost.frightened_timer = FPS  * 2
+                
         for ghost in self.ghosts:
             self.ghost_gate_open, self.ghost_gate_timer = ghost.move(self.pacman, self.scatter_mode, self.ghosts, maze, self.ghost_gate_open, self.ghost_gate_timer)
 
@@ -185,6 +185,7 @@ class PacmanGameAI:
 
 
     def play_step(self, action):
+        game_over=False
         # Convert action [UP, DOWN, LEFT, RIGHT] → direction
         direction_map = [LEFT, RIGHT, UP, DOWN]
         self.pacman.direction = direction_map[action.index(1)]
@@ -200,8 +201,7 @@ class PacmanGameAI:
             reward += 50
             for ghost in self.ghosts:
                 ghost.frightened = True
-                ghost.frightened_timer = FPS * 5
-
+                ghost.frightened_timer = FPS * 2
         for ghost in self.ghosts:
             self.ghost_gate_open, self.ghost_gate_timer = ghost.move(self.pacman, self.scatter_mode, self.ghosts, maze, self.ghost_gate_open, self.ghost_gate_timer)
 
@@ -215,16 +215,16 @@ class PacmanGameAI:
                     self.lives -= 1
                     reward -= 300
                     if self.lives == 0:
-                        return reward, True, self.score  # Done
+                        game_over=True
                     else:
                         self.reset_positions()
-                        return reward, False, self.score
 
         if not self.pellets.pellets and not self.pellets.energizers:
             reward += 1000
-            return reward, True, self.score
+            game_over=True
 
-        return reward, False, self.score
+        reward = np.clip(reward, -10, 10)
+        return reward, game_over, self.score
 
     def get_state(self, game):
         grid = np.zeros((GRID_HEIGHT, GRID_WIDTH), dtype=int)

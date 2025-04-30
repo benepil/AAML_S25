@@ -55,8 +55,12 @@ class Agent:
 
         #ghost
         for ghost in game.ghosts:
-            if 0 <= ghost.x < 19 and 0 <= ghost.y < 21:
-                grid[ghost.y][ghost.x] = 4
+            if ghost.frightened:
+                if 0 <= ghost.x < 19 and 0 <= ghost.y < 21:
+                    grid[ghost.y][ghost.x] = 6
+            else:
+                if 0 <= ghost.x < 19 and 0 <= ghost.y < 21:
+                    grid[ghost.y][ghost.x] = 4
 
         #pacman
         if 0 <= game.pacman.x < 19 and 0 <= game.pacman.y < 21:
@@ -135,6 +139,7 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
     all_actions = []
 
     for game_id in range(1, n_games + 1):
+        print(game_id)
         game = PacmanGameAI()
         done = False
         steps = 0
@@ -173,15 +178,15 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
 
     # Save CSV summary
     summary = {
-        "model": agent_name,
+        "model": f"model_{agent_name}",
         "avg_score": avg_score,
         "min_score": min(eval_scores),
         "max_score": max(eval_scores),
         "std_dev": np.std(eval_scores),
-        "action_0": action_dist.get(0, 0),
-        "action_1": action_dist.get(1, 0),
-        "action_2": action_dist.get(2, 0),
-        "action_2": action_dist.get(3, 0),
+        "avg_action_0": action_dist.get(0, 0)/n_games,
+        "avg_action_1": action_dist.get(1, 0)/n_games,
+        "avg_action_2": action_dist.get(2, 0)/n_games,
+        "avg_action_3": action_dist.get(3, 0)/n_games,
     }
     df = pd.DataFrame([summary])
     csv_path = "eval/eval_summary.csv"
@@ -220,7 +225,7 @@ def train(model=None):
         if done:
             game.reset()
 
-    with open("log_file", "w") as f:
+    with open("eval/log_file", "w") as f:
         f.write("game,score,record,mean_score,total_reward,loss\n")
 
     while x < ITERATIONS:
@@ -291,13 +296,13 @@ def train(model=None):
 
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
-    parser.add_argument("--iterations")
+    parser.add_argument("--games")
     parser.add_argument("--mode")
     parser.add_argument("--model")
     args=parser.parse_args()
 
-    if args.iterations:
-        ITERATIONS = int(args.iterations)
+    if args.games:
+        ITERATIONS = int(args.games)
     if args.mode:
         if args.mode=="train":
             if args.model:

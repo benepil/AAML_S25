@@ -1,1 +1,0 @@
-BOARD_RATIO = (20, 20)

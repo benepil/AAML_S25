@@ -34,7 +34,7 @@ class SnakeGameAI:
         self.direction_history = []
         self.steps_since_last_food = 0
         # init display
-        self.display = pygame.display.set_mode((self.w, self.h))
+        #self.display = pygame.display.set_mode((self.w, self.h))
         #pygame.display.set_caption('Snake')
         self.clock = pygame.time.Clock()
         self.reset()
@@ -46,8 +46,9 @@ class SnakeGameAI:
     def reset(self):
         # init game state
         self.direction = Direction.RIGHT
-
-        self.head = Point(self.w/2, self.h/2)
+        start_x = self.w/2 if (self.w/2)%BLOCK_SIZE==0 else self.w/2+BLOCK_SIZE/2
+        start_y = self.h/2 if (self.h/2)%BLOCK_SIZE==0 else self.h/2+BLOCK_SIZE/2
+        self.head = Point(start_x, start_y)
         self.snake = [self.head,
                       Point(self.head.x-BLOCK_SIZE, self.head.y),
                       Point(self.head.x-(2*BLOCK_SIZE), self.head.y)]
@@ -173,7 +174,7 @@ class SnakeGameAI:
 
         self.clock.tick(SPEED)
         reward = np.clip(reward, -10, 10)
-        self._update_ui()
+        #self._update_ui()
         return reward, game_over, self.score
 
 

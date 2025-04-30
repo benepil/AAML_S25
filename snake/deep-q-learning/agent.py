@@ -2,7 +2,7 @@ import torch
 import random
 import numpy as np
 from collections import deque
-from game import SnakeGameAI, Direction, Point
+from game import SnakeGameAI
 from helper import plot, plot_reward
 from model import Conv_QNet, QTrainer
 from copy import deepcopy
@@ -132,7 +132,6 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
         done = False
         steps = 0
         score = 0
-
         while not done:
             state = agent.get_state(game)
             final_move = agent.get_action(state, eval=True)
@@ -168,15 +167,15 @@ def evaluate(agent, model_path="model/model.pth", n_games=10):
 
     # Save CSV summary
     summary = {
-        "model": agent_name,
+        "model": f"model_{agent_name}",
         "avg_score": avg_score,
         "min_score": min(eval_scores),
         "max_score": max(eval_scores),
         "std_dev": np.std(eval_scores),
-        "action_0": action_dist.get(0, 0),
-        "action_1": action_dist.get(1, 0),
-        "action_2": action_dist.get(2, 0),
-        "action_3": action_dist.get(2, 0),
+        "avg_action_0": action_dist.get(0, 0)/n_games,
+        "avg_action_1": action_dist.get(1, 0)/n_games,
+        "avg_action_2": action_dist.get(2, 0)/n_games,
+        "avg_action_3": action_dist.get(3, 0)/n_games,
     }
     df = pd.DataFrame([summary])
     csv_path = "eval/eval_summary.csv"

@@ -9,4 +9,4 @@ DOWN = (0, 1)
 LEFT = (-1, 0)
 RIGHT = (1, 0)
 
-FPS = 120
+FPS = 60
